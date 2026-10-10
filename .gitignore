@@ -7,3 +7,4 @@ dist/
 *.db
 .playwright-mcp/
 data/
+package-lock.json
