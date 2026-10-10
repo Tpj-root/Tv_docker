@@ -1,48 +1,34 @@
-import asyncio, random, time
+import asyncio
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-TF = 60  # 1-minute candles
+from fastapi import FastAPI, HTTPException, Query, WebSocket
 
+from deriv_hub import DerivError, DerivHub
 
-def make_candles(n=300):
-    now = int(time.time()) // TF * TF
-    price, out = 100.0, []
-    for i in range(n, 0, -1):
-        o = price
-        c = o + random.gauss(0, 0.4)
-        h = max(o, c) + abs(random.gauss(0, 0.2))
-        l = min(o, c) - abs(random.gauss(0, 0.2))
-        out.append({"time": now - i * TF, "open": round(o, 2), "high": round(h, 2),
-                    "low": round(l, 2), "close": round(c, 2)})
-        price = c
-    return out
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("app")
 
+GRANULARITIES = {60, 120, 180, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400}
 
-candles = make_candles()
+FALLBACK_SYMBOLS = [
+    {"symbol": "R_10", "name": "Volatility 10 Index"},
+    {"symbol": "R_25", "name": "Volatility 25 Index"},
+    {"symbol": "R_50", "name": "Volatility 50 Index"},
+    {"symbol": "R_75", "name": "Volatility 75 Index"},
+    {"symbol": "R_100", "name": "Volatility 100 Index"},
+    {"symbol": "1HZ100V", "name": "Volatility 100 (1s) Index"},
+    {"symbol": "stpRNG", "name": "Step Index"},
+]
 
-
-async def ticker():
-    """Simulates live price ticks every second."""
-    while True:
-        await asyncio.sleep(1)
-        last = candles[-1]
-        t = int(time.time()) // TF * TF
-        price = last["close"] + random.gauss(0, 0.15)
-        if t > last["time"]:  # new minute -> new candle
-            candles.append({"time": t, "open": last["close"], "high": price,
-                            "low": price, "close": round(price, 2)})
-        else:
-            last["close"] = round(price, 2)
-            last["high"] = max(last["high"], price)
-            last["low"] = min(last["low"], price)
+hub = DerivHub()
 
 
 @asynccontextmanager
 async def lifespan(app):
-    task = asyncio.create_task(ticker())
+    hub.start()  # fails fast if .env is missing
     yield
-    task.cancel()
+    await hub.stop()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -50,20 +36,59 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "deriv_connected": hub._connected.is_set()}
+
+
+@app.get("/api/symbols")
+async def symbols():
+    try:
+        msg = await hub.request({"active_symbols": "brief"})
+        out = []
+        for s in msg.get("active_symbols", []):
+            sym = s.get("underlying_symbol") or s.get("symbol")
+            if sym:
+                out.append({
+                    "symbol": sym,
+                    "name": s.get("display_name") or s.get("underlying_symbol_name") or sym,
+                })
+        if out:
+            return sorted(out, key=lambda x: x["name"])
+    except Exception as e:
+        log.warning("active_symbols failed, using fallback: %s", e)
+    return FALLBACK_SYMBOLS
 
 
 @app.get("/api/candles")
-def get_candles():
-    return candles
+async def candles(symbol: str = "R_100", granularity: int = 60,
+                  count: int = Query(500, ge=1, le=5000)):
+    if granularity not in GRANULARITIES:
+        raise HTTPException(400, f"granularity must be one of {sorted(GRANULARITIES)}")
+    try:
+        return await hub.history(symbol, granularity, count)
+    except DerivError as e:
+        raise HTTPException(502, str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Deriv did not respond in time")
 
 
-@app.websocket("/ws/ticks")
-async def ws_ticks(ws: WebSocket):
+@app.websocket("/ws/candles")
+async def ws_candles(ws: WebSocket, symbol: str = "R_100", granularity: int = 60):
     await ws.accept()
+    if granularity not in GRANULARITIES:
+        await ws.close(code=1008)
+        return
+    key = (symbol, granularity)
+    q: asyncio.Queue = asyncio.Queue(maxsize=100)
+    try:
+        await hub.subscribe(key, q)
+    except Exception as e:
+        await ws.send_json({"error": str(e)})
+        await ws.close(code=1011)
+        return
     try:
         while True:
-            await ws.send_json(candles[-1])
-            await asyncio.sleep(1)
-    except WebSocketDisconnect:
-        pass
+            await ws.send_json(await q.get())
+    except Exception:
+        pass  # client went away
+    finally:
+        await hub.unsubscribe(key, q)

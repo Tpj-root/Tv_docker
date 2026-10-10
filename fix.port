@@ -1,0 +1,20 @@
+
+On Linux, check the firewall:
+
+
+sudo ufw status
+
+sudo ufw allow from 10.130.82.0/24 to any port 8010 proto tcp
+
+
+
+
+
+Then verify the Docker port mapping:
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+
+
+0.0.0.0:5173->5173/tcp
+
+
+sudo ufw allow from 10.130.82.0/24 to any port 5173 proto tcp

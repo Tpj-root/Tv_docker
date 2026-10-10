@@ -1,17 +1,9 @@
 #!/usr/bin/env bash
 
-# Open Terminal 1
-x-terminal-emulator -e bash -c '
-    cd backend && source $HOME/miniconda3/bin/activate && uvicorn main:app --port 8010
-    echo
-    read -n 1 -s -r -p "Press any key to exit..."
-' &
+PROJECT="$HOME/Desktop/MY_GIT/Tv_docker"
 
-# Open Terminal 2
-x-terminal-emulator -e bash -c '
-    cd frontend && npm install && npm run dev  
-    echo
-    read -n 1 -s -r -p "Press any key to exit..."
-' &
+gnome-terminal --title="TV Docker - Backend" -- bash -lc "cd '$PROJECT/backend' && source '$HOME/miniconda3/bin/activate' && uvicorn main:app --host 0.0.0.0 --port 8010; echo; read -n 1 -s -r -p 'Press any key to exit...'"
+
+gnome-terminal --title="TV Docker - Frontend" -- bash -lc "cd '$PROJECT/frontend' && npm install && npm run dev -- --host 0.0.0.0 --port 5173; echo; read -n 1 -s -r -p 'Press any key to exit...'"
 
 wait
