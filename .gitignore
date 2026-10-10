@@ -8,3 +8,4 @@ dist/
 .playwright-mcp/
 data/
 package-lock.json
+data/*.csv

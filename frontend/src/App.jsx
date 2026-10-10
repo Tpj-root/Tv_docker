@@ -1,87 +1,134 @@
-import { useEffect, useState, useRef } from "react";
-import { createChart } from "lightweight-charts";
+// ============================================================================
+//  App.jsx  -  page layout and the top bar
+// ============================================================================
+//   +--------------------------------------------+----------------+
+//   | top bar: symbol, timeframe, price, status  |  control bar   |
+//   +--------------------------------------------+  (right side)  |
+//   | chart                                      |                |
+//   +--------------------------------------------+                |
+//   | tabs: positions / history / summary / log  |                |
+//   +--------------------------------------------+----------------+
+// ============================================================================
+import { useEffect, useRef, useState } from "react";
+import { api, px, money, clsPnl } from "./api";
+import { useLive } from "./useLive";
+import Chart from "./Chart";
+import ControlPanel from "./ControlPanel";
+import { Positions, History, Summary, Log } from "./Tables";
 
-const TIMEFRAMES = [
-  ["1m", 60], ["5m", 300], ["15m", 900], ["30m",1800],
-  ["1h", 3600], ["4h", 14400], ["1d", 86400],
-];
+const TIMEFRAMES = [["1m", 60], ["2m", 120], ["3m", 180], ["5m", 300], ["10m", 600], ["15m", 900], ["30m", 1800], ["1h", 3600]];
 
 export default function App() {
-  const ref = useRef(null);
+  const { state, bus } = useLive();
+  const [schema, setSchema] = useState(null);
   const [symbols, setSymbols] = useState([]);
-  const [symbol, setSymbol] = useState("R_100");
-  const [gran, setGran] = useState(60);
-  const [status, setStatus] = useState("loading...");
+  const [tab, setTab] = useState("positions");
+  const [notice, setNotice] = useState(null);
+  const noticeTimer = useRef();
+
+  // Short message at the bottom of the screen (errors from the backend).
+  const notify = (msg) => {
+    setNotice(msg);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 6000);
+  };
 
   useEffect(() => {
-    fetch("/api/symbols").then((r) => r.json()).then(setSymbols).catch(() => {});
+    api("/api/schema").then(setSchema).catch((e) => notify(e.message));
   }, []);
 
+  // Symbols come from Deriv, so load them again once the backend is connected.
+  const ready = state.status?.ready;
   useEffect(() => {
-    let alive = true;
-    let ws;
-    setStatus("loading...");
+    api("/api/symbols").then(setSymbols).catch(() => {});
+  }, [ready]);
 
-    const chart = createChart(ref.current, {
-      height: window.innerHeight - 60,
-      layout: { background: { color: "#131722" }, textColor: "#d1d4dc" },
-      grid: { vertLines: { color: "#1e222d" }, horzLines: { color: "#1e222d" } },
-      timeScale: { timeVisible: true, secondsVisible: false },
-    });
-    const series = chart.addCandlestickSeries();
+  const changeMarket = async (symbol, timeframe) => {
+    try {
+      await api("/api/market", "POST", { symbol, timeframe });
+    } catch (e) {
+      notify(e.message);
+    }
+  };
 
-    fetch(`/api/candles?symbol=${encodeURIComponent(symbol)}&granularity=${gran}&count=500`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
-        return r.json();
-      })
-      .then((data) => {
-        if (!alive) return;
-        series.setData(data);
-        chart.timeScale().fitContent();
+  const list = symbols.some((s) => s.symbol === state.symbol) || !state.symbol
+    ? symbols : [{ symbol: state.symbol, name: state.symbol }, ...symbols];
 
-        const proto = location.protocol === "https:" ? "wss" : "ws";
-        ws = new WebSocket(
-          `${proto}://${location.host}/ws/candles?symbol=${encodeURIComponent(symbol)}&granularity=${gran}`
-        );
-        ws.onmessage = (e) => {
-          const m = JSON.parse(e.data);
-          if (m.error) return setStatus("error: " + m.error);
-          try { series.update(m); setStatus("live"); } catch {}
-        };
-        ws.onclose = () => alive && setStatus("disconnected");
-      })
-      .catch((err) => alive && setStatus("error: " + err.message));
+  // ---- connection status chip ----
+  const st = state.status;
+  let chip = { cls: "bad", text: "Backend offline" };
+  if (state.connected && st) {
+    if (!st.deriv_connected) chip = { cls: "bad", text: "Deriv offline" };
+    else if (!st.ready) chip = { cls: "warn", text: st.error ? "Retrying…" : "Loading history…" };
+    else chip = { cls: "ok", text: st.tick_age != null && st.tick_age > 15 ? `No tick for ${Math.round(st.tick_age)} s` : "Live" };
+  }
 
-    const onResize = () =>
-      chart.applyOptions({ width: ref.current.clientWidth, height: window.innerHeight - 60 });
-    window.addEventListener("resize", onResize);
-
-    return () => {
-      alive = false;
-      window.removeEventListener("resize", onResize);
-      ws && ws.close();
-      chart.remove();
-    };
-  }, [symbol, gran]);
-
-  const list = symbols.length ? symbols : [{ symbol, name: symbol }];
+  const acc = state.account;
+  const showHa = !!state.settings?.view?.show_ha;
 
   return (
-    <>
-      <header style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <span>TV Clone</span>
-        <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-          {list.map((s) => (
-            <option key={s.symbol} value={s.symbol}>{s.name} ({s.symbol})</option>
+    <div className="app">
+      <header className="top">
+        <div className="brand">TV Clone</div>
+
+        <select className="sym" value={state.symbol} onChange={(e) => changeMarket(e.target.value, state.timeframe)}>
+          {list.map((s) => <option key={s.symbol} value={s.symbol}>{s.name} ({s.symbol})</option>)}
+        </select>
+
+        <div className="seg">
+          {TIMEFRAMES.map(([label, sec]) => (
+            <button key={sec} className={state.timeframe === sec ? "on" : ""}
+                    onClick={() => changeMarket(state.symbol, sec)}>{label}</button>
           ))}
-        </select>
-        <select value={gran} onChange={(e) => setGran(Number(e.target.value))}>
-          {TIMEFRAMES.map(([label, g]) => <option key={g} value={g}>{label}</option>)}
-        </select>
-        <span style={{ marginLeft: "auto", fontWeight: 400, opacity: 0.7 }}>{status}</span>
+        </div>
+
+        <div className="price">{state.price != null ? px(state.price) : "-"}</div>
+
+        {state.pending && (
+          <div className={"pending " + state.pending.side.toLowerCase()}>
+            {state.pending.side} waiting {Math.ceil(state.pending.remaining)} s
+          </div>
+        )}
+
+        <div className="spacer" />
+        {acc && (
+          <div className="acct">
+            <span>Equity <b>{acc.equity}</b></span>
+            <span>Open profit <b className={clsPnl(acc.unrealized)}>{money(acc.unrealized)}</b></span>
+            <span>Closed profit <b className={clsPnl(acc.realized)}>{money(acc.realized)}</b></span>
+          </div>
+        )}
+        <div className={"chip " + chip.cls}>{chip.text}</div>
       </header>
-      <div ref={ref} />
-    </>
+
+      <main className="main">
+        <section className="chart-area">
+          <Chart bus={bus} positions={state.positions} showHa={showHa} />
+        </section>
+
+        <section className="bottom">
+          <nav className="tabs">
+            <button className={tab === "positions" ? "on" : ""} onClick={() => setTab("positions")}>
+              Open positions ({state.positions.length})
+            </button>
+            <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>
+              Trade history ({state.trades.length})
+            </button>
+            <button className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")}>Account</button>
+            <button className={tab === "log" ? "on" : ""} onClick={() => setTab("log")}>Activity</button>
+          </nav>
+          <div className="tab-body">
+            {tab === "positions" && <Positions positions={state.positions} notify={notify} />}
+            {tab === "history" && <History trades={state.trades} />}
+            {tab === "summary" && <Summary account={acc} />}
+            {tab === "log" && <Log events={state.events} />}
+          </div>
+        </section>
+      </main>
+
+      <ControlPanel schema={schema} settings={state.settings} notify={notify} />
+
+      {notice && <div className="notice" onClick={() => setNotice(null)}>{notice}</div>}
+    </div>
   );
 }

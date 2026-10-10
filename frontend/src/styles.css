@@ -1,0 +1,112 @@
+/* ===========================================================================
+   styles.css  -  dark trading terminal
+   Colours: bg #0e1117  panel #141922  line #232b38  text #d5dbe6  muted #7b8798
+            up #26a69a  down #ef5350  warn #e0a526
+   Numbers use tabular figures so columns line up while prices change.
+   =========================================================================== */
+:root {
+  --bg: #0e1117; --panel: #141922; --raise: #1a202b; --line: #232b38;
+  --text: #d5dbe6; --muted: #7b8798; --up: #26a69a; --down: #ef5350; --warn: #e0a526;
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.4 var(--font); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+.up { color: var(--up); } .down { color: var(--down); } .muted { color: var(--muted); } .pad { padding: 16px; }
+
+/* ---- layout ---- */
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
+.top { grid-column: 1 / 2; display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; flex-wrap: wrap; }
+.main { grid-column: 1 / 2; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.panel { grid-column: 2 / 3; grid-row: 1 / 3; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+.chart-area { flex: 1 1 auto; min-height: 260px; position: relative; }
+.bottom { flex: 0 0 270px; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--panel); min-height: 0; }
+
+/* ---- top bar ---- */
+.brand { font-weight: 600; font-size: 15px; letter-spacing: 0.2px; }
+.sym { background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; max-width: 260px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 5px 9px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: var(--raise); color: var(--text); font-weight: 500; }
+.price { font-size: 20px; font-weight: 600; min-width: 90px; }
+.spacer { flex: 1; }
+.acct { display: flex; gap: 16px; color: var(--muted); }
+.acct b { color: var(--text); font-weight: 500; margin-left: 4px; }
+.acct b.up { color: var(--up); } .acct b.down { color: var(--down); }
+.chip { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--line); font-size: 12px; }
+.chip.ok { color: var(--up); border-color: #1d4f4a; } .chip.warn { color: var(--warn); border-color: #5b4515; } .chip.bad { color: var(--down); border-color: #5a2a29; }
+.pending { padding: 3px 10px; border-radius: 4px; font-weight: 500; border: 1px solid var(--warn); color: var(--warn); }
+
+/* ---- chart ---- */
+.chart-wrap { position: absolute; inset: 0; }
+.chart-box { position: absolute; inset: 0; }
+.chart-overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+
+/* ---- tabs and tables ---- */
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--muted); }
+.tabs button.on { color: var(--text); border-bottom-color: var(--text); }
+.tab-body { flex: 1; min-height: 0; overflow: auto; }
+.table-scroll { overflow: auto; height: 100%; }
+table { border-collapse: collapse; width: 100%; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 500; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 5px 10px; border-bottom: 1px solid #1a212c; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--raise); }
+tr.detail td { background: #10151d; color: var(--muted); line-height: 1.7; white-space: normal; }
+.tag { padding: 1px 7px; border-radius: 3px; font-weight: 500; font-size: 12px; }
+.tag.buy { background: rgba(38,166,154,.16); color: var(--up); } .tag.sell { background: rgba(239,83,80,.16); color: var(--down); }
+.empty { padding: 20px; color: var(--muted); }
+.summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1px; background: var(--line); }
+.stat { background: var(--panel); padding: 10px 14px; }
+.stat-k { color: var(--muted); font-size: 12px; } .stat-v { font-size: 16px; font-weight: 500; margin-top: 2px; }
+.log { padding: 6px 0; }
+.log-row { display: flex; gap: 12px; padding: 3px 14px; }
+.log-time { color: var(--muted); min-width: 140px; } .log-kind { min-width: 52px; color: var(--muted); }
+.log-row.open .log-kind { color: var(--up); } .log-row.close .log-kind { color: var(--warn); } .log-row.signal .log-kind { color: #6aa8ff; }
+
+/* ---- buttons ---- */
+.btn { background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 7px 12px; cursor: pointer; text-align: center; text-decoration: none; color: var(--text); display: inline-block; }
+.btn:hover { border-color: #3a4558; }
+.btn.small { padding: 2px 9px; } .btn.ghost { background: transparent; }
+.btn.buy { background: var(--up); border-color: var(--up); color: #04201d; font-weight: 600; }
+.btn.sell { background: var(--down); border-color: var(--down); color: #2b0a09; font-weight: 600; }
+
+/* ---- control bar ---- */
+.panel-title { padding: 12px 16px; font-weight: 600; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.group { border-bottom: 1px solid var(--line); }
+.group summary { list-style: none; display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; cursor: pointer; }
+.group summary::-webkit-details-marker { display: none; }
+.group-title { font-weight: 500; }
+.group-desc { padding: 0 16px 6px; }
+.group-body { padding: 4px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
+.group.off .group-body { opacity: 0.45; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.ctl-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ctl label { color: var(--text); }
+.num, .ctl select { width: 96px; background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; text-align: right; }
+.ctl select { width: 130px; text-align: left; }
+.ctl.check { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+.ctl.check .hint { grid-column: 2; margin: 0; }
+input[type=range] { width: 100%; accent-color: #cfd6e3; }
+input[type=checkbox] { accent-color: #cfd6e3; }
+.switch { position: relative; width: 34px; height: 18px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; background: #2b3444; border-radius: 9px; transition: background .15s; cursor: pointer; }
+.slider::before { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; background: #cfd6e3; border-radius: 50%; transition: transform .15s; }
+.switch input:checked + .slider { background: var(--up); }
+.switch input:checked + .slider::before { transform: translateX(16px); }
+.manual { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.panel-foot { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 20px; }
+
+.notice { position: fixed; left: 16px; bottom: 16px; max-width: 520px; background: #2a1514; border: 1px solid #5a2a29; color: #ffb4b0; padding: 10px 14px; border-radius: 6px; cursor: pointer; z-index: 10; }
+
+/* ---- small screens: control bar goes under the chart ---- */
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto; height: auto; min-height: 100vh; }
+  .top, .main, .panel { grid-column: 1; grid-row: auto; }
+  .panel { border-left: 0; border-top: 1px solid var(--line); }
+  .chart-area { height: 55vh; flex: none; }
+  .bottom { flex: none; height: 280px; }
+}
+@media (prefers-reduced-motion: reduce) { .slider, .slider::before { transition: none; } }
